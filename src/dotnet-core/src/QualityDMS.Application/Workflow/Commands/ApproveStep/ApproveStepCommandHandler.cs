@@ -35,7 +35,7 @@ public class ApproveStepCommandHandler(
             Action = WorkflowStepStatus.Approved,
             Comments = cmd.Comments,
             ActionDate = DateTime.UtcNow,
-            CreatedBy = currentUser.UserId
+            CreatedBy = currentUser.UserName
         };
         await workflowRepository.AddActionAsync(action, ct);
 
@@ -132,3 +132,4 @@ public class ApproveStepCommandHandler(
         return Result.Success();
     }
 }
+

@@ -36,7 +36,7 @@ public class UpdateDocumentCommandHandler(
             document.WorkflowTemplateId = cmd.WorkflowTemplateId;
             document.NextReviewDate = cmd.NextReviewDate;
         }
-        document.UpdatedBy = currentUser.UserId;
+        document.UpdatedBy = currentUser.UserName;
 
         var hasNewFile = cmd.FileStream is not null && cmd.FileName is not null && cmd.ContentType is not null;
 
@@ -58,3 +58,4 @@ public class UpdateDocumentCommandHandler(
         return Result.Success();
     }
 }
+
