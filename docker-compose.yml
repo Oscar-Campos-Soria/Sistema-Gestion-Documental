@@ -3,9 +3,9 @@
 #  Servicios: SQL Server · PostgreSQL · MongoDB
 #             .NET 10 · PHP 8 · FastAPI (Python) · Nginx
 # ══════════════════════════════════════════════════════════
-
+ 
 services:
-
+ 
   # ──────────────────────────────────────────────────────
   # Nginx — Reverse proxy + HTTPS (cert self-signed)
   # ──────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 128M
-
+ 
   # ──────────────────────────────────────────────────────
   # SQL Server 2022 — Fuente maestra (CalidadSYS)
   # ──────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ services:
         limits:
           cpus: '2.0'
           memory: 2G
-
+ 
   # ──────────────────────────────────────────────────────
   # PostgreSQL 16 — Módulo PublicDMS
   # ──────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 512M
-
+ 
   # ──────────────────────────────────────────────────────
   # MongoDB 7 — Motor de búsqueda / indexación
   # ──────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 512M
-
+ 
   # ──────────────────────────────────────────────────────
   # .NET Core 10 — Módulo Central (CalidadSYS)
   # ──────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 1G
-
+ 
   # ──────────────────────────────────────────────────────
   # FastAPI (Python 3.12) — Indexación y Metadatos
   # ──────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 256M
-
+ 
   # ──────────────────────────────────────────────────────
   # PHP 8.3 + Apache — Módulo PublicDMS (Consulta Pública)
   # Sync por eventos (.NET → PHP). Sin polling ni cron.
@@ -248,19 +248,44 @@ services:
         limits:
           cpus: '0.5'
           memory: 256M
-
+ 
 # ══════════════════════════════════════════════════════════
-#  Volúmenes
+#  Volúmenes — Separados por servicio con driver explícito
 # ══════════════════════════════════════════════════════════
 volumes:
+ 
   sqlserver_data:
+    driver: local
+    labels:
+      com.dms.service: "sqlserver"
+      com.dms.description: "Datos persistentes SQL Server 2022 - Modulo CalidadSYS"
+      com.dms.managed-by: "docker-compose"
+ 
   postgres_data:
+    driver: local
+    labels:
+      com.dms.service: "postgres"
+      com.dms.description: "Datos persistentes PostgreSQL 16 - Modulo PublicDMS"
+      com.dms.managed-by: "docker-compose"
+ 
   mongo_data:
+    driver: local
+    labels:
+      com.dms.service: "mongodb"
+      com.dms.description: "Datos persistentes MongoDB 7 - Indice full-text y metadatos"
+      com.dms.managed-by: "docker-compose"
+ 
   uploads_data:
-
+    driver: local
+    labels:
+      com.dms.service: "shared-storage"
+      com.dms.description: "Volumen compartido de archivos - dotnet (RW), fastapi (RO), php (RO)"
+      com.dms.managed-by: "docker-compose"
+ 
 # ══════════════════════════════════════════════════════════
 #  Red interna
 # ══════════════════════════════════════════════════════════
 networks:
   dms_net:
     driver: bridge
+ 
