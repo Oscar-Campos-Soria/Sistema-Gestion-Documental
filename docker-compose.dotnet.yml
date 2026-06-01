@@ -1,0 +1,103 @@
+# ══════════════════════════════════════════════════════════
+#  Entorno 1: .NET Core 10 + SQL Server
+#  Módulo Central — CalidadSYS
+#  Levantar: docker compose -f docker-compose.dotnet.yml up -d
+# ══════════════════════════════════════════════════════════
+
+services:
+
+  # ──────────────────────────────────────────────────────
+  # SQL Server 2022 — Fuente maestra (CalidadSYS)
+  # ──────────────────────────────────────────────────────
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dms_sqlserver
+    environment:
+      SA_PASSWORD:  ${MSSQL_SA_PASSWORD}
+      ACCEPT_EULA:  "Y"
+      MSSQL_PID:    Developer
+    ports:
+      - "127.0.0.1:1434:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL",
+             "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '${MSSQL_SA_PASSWORD}' -Q 'SELECT 1' -No || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # ──────────────────────────────────────────────────────
+  # .NET Core 10 — Módulo Central (CalidadSYS)
+  # ──────────────────────────────────────────────────────
+  dotnet:
+    build:
+      context: ./src/dotnet-core
+    container_name: dms_dotnet
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__QualityDMS: "Server=sqlserver,1433;Database=${MSSQL_DB:-QualityDMS};User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Storage__LocalPath: /app/uploads
+      PublicDms__WebhookUrl: http://fastapi:8000
+      PublicDms__ApiKey: ${FASTAPI_API_KEY}
+      PublicDms__PhpSyncUrl: http://php
+    ports:
+      - "127.0.0.1:5080:8080"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+# ══════════════════════════════════════════════════════════
+#  Volúmenes
+# ══════════════════════════════════════════════════════════
+volumes:
+  sqlserver_data:
+    driver: local
+    labels:
+      com.dms.service: "sqlserver"
+      com.dms.description: "Datos persistentes SQL Server 2022 - Modulo CalidadSYS"
+      com.dms.managed-by: "docker-compose"
+
+  uploads_data:
+    driver: local
+    labels:
+      com.dms.service: "shared-storage"
+      com.dms.description: "Volumen compartido de archivos - dotnet (RW), fastapi (RO), php (RO)"
+      com.dms.managed-by: "docker-compose"
+
+# ══════════════════════════════════════════════════════════
+#  Red externa compartida entre los 3 entornos
+# ══════════════════════════════════════════════════════════
+networks:
+  dms_net:
+    external: true

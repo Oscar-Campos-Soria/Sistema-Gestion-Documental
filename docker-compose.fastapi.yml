@@ -1,0 +1,130 @@
+# ══════════════════════════════════════════════════════════
+#  Entorno 3: FastAPI (Python) + MongoDB + Nginx
+#  Módulo de Indexación y Búsqueda
+#  Levantar: docker compose -f docker-compose.fastapi.yml up -d
+# ══════════════════════════════════════════════════════════
+
+services:
+
+  # ──────────────────────────────────────────────────────
+  # MongoDB 7 — Motor de búsqueda / indexación
+  # ──────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: dms_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-mongoadmin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE:      dms_metadata
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./db/mongo:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # ──────────────────────────────────────────────────────
+  # FastAPI (Python 3.12) — Indexación y Metadatos
+  # ──────────────────────────────────────────────────────
+  fastapi:
+    build:
+      context: ./src/python-service
+    container_name: dms_fastapi
+    environment:
+      MONGO_URL:              mongodb://${MONGO_USER:-mongoadmin}:${MONGO_PASSWORD}@mongodb:27017/?authSource=admin
+      DATABASE_NAME:          dms_metadata
+      FASTAPI_API_KEY:        ${FASTAPI_API_KEY}
+      JWT_SECRET:             ${JWT_SECRET}
+      DOTNET_API_URL:         http://dotnet:8080
+      DMS_STORAGE_PATH:       /app/uploads
+    volumes:
+      - uploads_data:/app/uploads:ro
+    ports:
+      - "127.0.0.1:8001:8000"
+    expose:
+      - "8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ──────────────────────────────────────────────────────
+  # Nginx — Reverse proxy + HTTPS (cert self-signed)
+  # ──────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./docker/nginx
+    container_name: dms_nginx
+    ports:
+      - "80:80"
+      - "8443:443"
+    depends_on:
+      - fastapi
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+# ══════════════════════════════════════════════════════════
+#  Volúmenes
+# ══════════════════════════════════════════════════════════
+volumes:
+  mongo_data:
+    driver: local
+    labels:
+      com.dms.service: "mongodb"
+      com.dms.description: "Datos persistentes MongoDB 7 - Indice full-text y metadatos"
+      com.dms.managed-by: "docker-compose"
+
+  uploads_data:
+    driver: local
+    labels:
+      com.dms.service: "shared-storage"
+      com.dms.description: "Volumen compartido de archivos - dotnet (RW), fastapi (RO), php (RO)"
+      com.dms.managed-by: "docker-compose"
+
+# ══════════════════════════════════════════════════════════
+#  Red externa compartida entre los 3 entornos
+# ══════════════════════════════════════════════════════════
+networks:
+  dms_net:
+    external: true
+

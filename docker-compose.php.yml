@@ -1,0 +1,103 @@
+# ══════════════════════════════════════════════════════════
+#  Entorno 2: PHP 8.3 + PostgreSQL 16
+#  Módulo Público — PublicDMS
+#  Levantar: docker compose -f docker-compose.php.yml up -d
+# ══════════════════════════════════════════════════════════
+
+services:
+
+  # ──────────────────────────────────────────────────────
+  # PostgreSQL 16 — Módulo PublicDMS
+  # ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: dms_postgres
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-PublicDMS}
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-PublicDMS}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # ──────────────────────────────────────────────────────
+  # PHP 8.3 + Apache — Módulo PublicDMS (Consulta Pública)
+  # ──────────────────────────────────────────────────────
+  php:
+    build:
+      context: ./src/php-app
+    container_name: dms_php
+    environment:
+      POSTGRES_HOST:      postgres
+      POSTGRES_DB:        ${POSTGRES_DB:-PublicDMS}
+      POSTGRES_USER:      ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD:  ${POSTGRES_PASSWORD}
+      DMS_STORAGE_PATH:   /var/dms/uploads
+      FASTAPI_URL:        http://fastapi:8000
+      FASTAPI_API_KEY:    ${FASTAPI_API_KEY}
+      DOTNET_API_URL:     http://dotnet:8080
+    ports:
+      - "127.0.0.1:8082:80"
+    volumes:
+      - uploads_data:/var/dms/uploads:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - dms_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+# ══════════════════════════════════════════════════════════
+#  Volúmenes
+# ══════════════════════════════════════════════════════════
+volumes:
+  postgres_data:
+    driver: local
+    labels:
+      com.dms.service: "postgres"
+      com.dms.description: "Datos persistentes PostgreSQL 16 - Modulo PublicDMS"
+      com.dms.managed-by: "docker-compose"
+
+  uploads_data:
+    driver: local
+    labels:
+      com.dms.service: "shared-storage"
+      com.dms.description: "Volumen compartido de archivos - dotnet (RW), fastapi (RO), php (RO)"
+      com.dms.managed-by: "docker-compose"
+
+# ══════════════════════════════════════════════════════════
+#  Red externa compartida entre los 3 entornos
+# ══════════════════════════════════════════════════════════
+networks:
+  dms_net:
+    external: true
